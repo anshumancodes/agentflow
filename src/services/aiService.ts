@@ -1,6 +1,54 @@
 import { generateContent } from "@/lib/gemini";
-import type { ITask, EmailTone } from "@/types";
+import type { ITask, EmailTone, TaskPriority } from "@/types";
 import { format } from "date-fns";
+
+export interface ExtractedTask {
+  title: string;
+  description?: string;
+  priority: TaskPriority;
+  dueDate?: string; // ISO date string YYYY-MM-DD or undefined
+}
+
+/** Build a prompt that instructs Gemini to extract structured tasks from free text */
+export function buildExtractTasksPrompt(text: string): string {
+  const today = format(new Date(), "yyyy-MM-dd");
+  return `You are a task extraction AI. Analyze the following text (email, meeting notes, paragraph, etc.) and extract every actionable task or to-do item.
+
+Return ONLY a valid JSON array — no prose, no markdown fences, no explanation.
+Each element must have exactly these fields:
+- "title": short imperative sentence (max 120 chars)
+- "description": optional brief context (max 300 chars, omit if not useful)
+- "priority": one of "low", "medium", "high"
+- "dueDate": ISO date string YYYY-MM-DD if a specific date/deadline is mentioned, otherwise omit
+
+Today's date is ${today}. Resolve relative dates like "tomorrow" or "next Friday" relative to today.
+If no actionable tasks are found, return an empty array [].
+
+Text to analyze:
+"""
+${text}
+"""`;
+}
+
+/** Extract actionable tasks from arbitrary text using Gemini */
+export async function extractTasksFromText(text: string): Promise<ExtractedTask[]> {
+  const prompt = buildExtractTasksPrompt(text);
+  const raw = await generateContent(prompt);
+
+  // Strip any accidental markdown fences
+  const cleaned = raw.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (t): t is ExtractedTask =>
+        typeof t.title === "string" && ["low", "medium", "high"].includes(t.priority)
+    );
+  } catch {
+    return [];
+  }
+}
 
 /** Serialize tasks into a concise text context for the AI */
 export function buildTaskContext(tasks: ITask[]): string {

@@ -1,11 +1,29 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/store/useAppStore";
 import type { INotification } from "@/types";
 
+/**
+ * Checks whether any tasks are due today and seeds deadline notifications for
+ * them (deduped server-side).  Called once per session on mount.
+ */
+async function seedDueNotifications() {
+  await fetch("/api/notifications/check-due", { method: "POST" });
+}
+
 export function useNotifications() {
   const setUnreadCount = useAppStore((s) => s.setUnreadCount);
+  const qc = useQueryClient();
+
+  // On mount: generate due-today notifications then refresh the list
+  useEffect(() => {
+    seedDueNotifications().then(() =>
+      qc.invalidateQueries({ queryKey: ["notifications"] })
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return useQuery<INotification[]>({
     queryKey: ["notifications"],
