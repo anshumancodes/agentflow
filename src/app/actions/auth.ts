@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { SignupSchema } from "@/validators/auth";
@@ -54,7 +55,8 @@ export async function loginAction(
   try {
     await signIn("credentials", { email, password, redirectTo: "/dashboard" });
     return { success: true };
-  } catch {
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
     return { errors: { email: ["Invalid email or password."] } };
   }
 }
